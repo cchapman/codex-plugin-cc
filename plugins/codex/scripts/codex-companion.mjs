@@ -564,9 +564,11 @@ function getJobKindLabel(kind, jobClass) {
   return jobClass === "review" ? "review" : "rescue";
 }
 
-function createCompanionJob({ prefix, kind, title, workspaceRoot, jobClass, summary, write = false }) {
+function createCompanionJob({ prefix, kind, title, workspaceRoot, jobClass, summary, write = false, jobId = null }) {
   return createJobRecord({
-    id: generateJobId(prefix),
+    // HOUSE-BEGIN(job-id-down): caller-supplied id wins (SKILL generates + passes DOWN)
+    id: typeof jobId === "string" && jobId.trim() ? jobId.trim() : generateJobId(prefix),
+    // HOUSE-END(job-id-down)
     kind,
     kindLabel: getJobKindLabel(kind, jobClass),
     title,
@@ -589,7 +591,7 @@ function createTrackedProgress(job, options = {}) {
   };
 }
 
-function buildTaskJob(workspaceRoot, taskMetadata, write) {
+function buildTaskJob(workspaceRoot, taskMetadata, write, jobId = null) {
   return createCompanionJob({
     prefix: "task",
     kind: "task",
@@ -597,7 +599,8 @@ function buildTaskJob(workspaceRoot, taskMetadata, write) {
     workspaceRoot,
     jobClass: "task",
     summary: taskMetadata.summary,
-    write
+    write,
+    jobId // HOUSE(job-id-down)
   });
 }
 
@@ -711,7 +714,7 @@ function enqueueBackgroundTask(cwd, job, request) {
 
 async function handleReviewCommand(argv, config) {
   const { options, positionals } = parseCommandInput(argv, {
-    valueOptions: ["base", "scope", "model", "cwd"],
+    valueOptions: ["base", "scope", "model", "cwd", /* HOUSE(job-id-down) */ "job-id"],
     booleanOptions: ["json", "background", "wait"],
     aliasMap: {
       m: "model"
@@ -734,7 +737,8 @@ async function handleReviewCommand(argv, config) {
     title: metadata.title,
     workspaceRoot,
     jobClass: "review",
-    summary: metadata.summary
+    summary: metadata.summary,
+    jobId: options["job-id"] ?? null // HOUSE(job-id-down)
   });
   await runForegroundCommand(
     job,
@@ -761,7 +765,7 @@ async function handleReview(argv) {
 
 async function handleTask(argv) {
   const { options, positionals } = parseCommandInput(argv, {
-    valueOptions: ["model", "effort", "cwd", "prompt-file"],
+    valueOptions: ["model", "effort", "cwd", "prompt-file", /* HOUSE(job-id-down) */ "job-id"],
     booleanOptions: ["json", "write", "resume-last", "resume", "fresh", "background"],
     aliasMap: {
       m: "model"
@@ -789,7 +793,7 @@ async function handleTask(argv) {
     ensureCodexAvailable(cwd);
     requireTaskRequest(prompt, resumeLast);
 
-    const job = buildTaskJob(workspaceRoot, taskMetadata, write);
+    const job = buildTaskJob(workspaceRoot, taskMetadata, write, options["job-id"] ?? null); // HOUSE(job-id-down)
     const request = buildTaskRequest({
       cwd,
       model,
@@ -804,7 +808,7 @@ async function handleTask(argv) {
     return;
   }
 
-  const job = buildTaskJob(workspaceRoot, taskMetadata, write);
+  const job = buildTaskJob(workspaceRoot, taskMetadata, write, options["job-id"] ?? null); // HOUSE(job-id-down)
   await runForegroundCommand(
     job,
     (progress) =>
