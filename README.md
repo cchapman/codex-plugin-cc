@@ -1,5 +1,14 @@
 # Codex plugin for Claude Code
 
+> **House fork (cchapman/codex-plugin-cc).** Branch topology: `house` is the
+> carrying branch AND the GitHub default (marketplace installs follow it);
+> `main` is a pristine upstream mirror of openai/codex-plugin-cc — never commit
+> or push to it. House changes are HOUSE-marked overlays
+> (`plugins/codex/scripts/house-overlay/`, `HOUSE-BEGIN`/`HOUSE-END` blocks in
+> upstream files) plus repo-root `tests/house-*.test.mjs`; run tests via
+> `./house-test.sh`, not bare `npm test`. Marketplace identity:
+> `codex@cchapman-codex` v2.0.0.
+
 Use Codex from inside Claude Code for code reviews or to delegate tasks to Codex.
 
 This plugin is for Claude Code users who want an easy way to start using Codex from the workflow

@@ -1,17 +1,17 @@
 {
-  "name": "openai-codex",
+  "name": "cchapman-codex",
   "owner": {
-    "name": "OpenAI"
+    "name": "cchapman"
   },
   "metadata": {
-    "description": "Codex plugins to use in Claude Code for delegation and code review.",
-    "version": "1.0.6"
+    "description": "Codex plugins for Claude Code — cchapman house fork (turn deadline, fail-closed review, supervisor entrypoints).",
+    "version": "2.0.0"
   },
   "plugins": [
     {
       "name": "codex",
       "description": "Use Codex from Claude Code to review code or delegate tasks.",
-      "version": "1.0.6",
+      "version": "2.0.0",
       "author": {
         "name": "OpenAI"
       },
