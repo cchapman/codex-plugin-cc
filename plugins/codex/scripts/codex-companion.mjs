@@ -197,7 +197,11 @@ async function buildSetupReport(cwd, actionsTaken = []) {
     nextSteps.push("If browser login is blocked, retry with `!codex login --device-auth` or `!codex login --with-api-key`.");
   }
   if (!config.stopReviewGate) {
-    nextSteps.push("Optional: run `/codex:setup --enable-review-gate` to require a fresh review before stop.");
+    // HOUSE-BEGIN(setup-gate-warning): upstream upsells enabling the gate here;
+    // house policy is gate OFF — it duplicates the external stop-gate +
+    // review-changes flow and adds 20-135s Stop tails (see ~/.claude/docs/SETUP.md).
+    nextSteps.push("Stop-review gate is OFF — house policy: keep it off (duplicates the external review flow; see ~/.claude/docs/SETUP.md).");
+    // HOUSE-END(setup-gate-warning)
   }
 
   return {
@@ -230,6 +234,12 @@ async function handleSetup(argv) {
   if (options["enable-review-gate"]) {
     setConfig(workspaceRoot, "stopReviewGate", true);
     actionsTaken.push(`Enabled the stop-time review gate for ${workspaceRoot}.`);
+    // HOUSE-BEGIN(setup-gate-warning): deterministic warning at the enable
+    // moment — the flag is machine-local and this gate duplicates the house
+    // stop-gate + review-changes flow (20-135s Stop tails; can loop
+    // Claude/Codex and drain usage).
+    actionsTaken.push("WARNING (house policy): the stop-review gate duplicates the external stop-gate + review-changes flow and adds 20-135s Stop tails; it can loop Claude/Codex and drain usage limits. Keep it OFF unless actively monitored — revert with /codex:setup --disable-review-gate (see ~/.claude/docs/SETUP.md).");
+    // HOUSE-END(setup-gate-warning)
   } else if (options["disable-review-gate"]) {
     setConfig(workspaceRoot, "stopReviewGate", false);
     actionsTaken.push(`Disabled the stop-time review gate for ${workspaceRoot}.`);
