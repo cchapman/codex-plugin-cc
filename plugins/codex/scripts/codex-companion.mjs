@@ -21,6 +21,7 @@ import {
     runAppServerReview,
     runAppServerTurn
   } from "./lib/codex.mjs";
+import { computeReviewExitStatus, reviewShapeError } from "./house-overlay/review-shape.mjs"; // HOUSE(fail-closed-review)
 import { resolveClaudeSessionPath } from "./lib/claude-session-transfer.mjs";
 import { readStdinIfPiped } from "./lib/fs.mjs";
 import { collectReviewContext, ensureGitRepository, resolveReviewTarget } from "./lib/git.mjs";
@@ -442,7 +443,16 @@ async function executeReviewRun(request) {
   };
 
   return {
-    exitStatus: result.status,
+    // HOUSE-BEGIN(fail-closed-review) — persisted status must reflect full-shape
+    // validity: runTrackedJob stores "completed" whenever exitStatus === 0,
+    // independent of parseError, and a polled job cannot be un-completed later.
+    exitStatus: computeReviewExitStatus({
+      turnStatus: result.status,
+      parseError: parsed.parseError,
+      result: parsed.parsed
+    }),
+    houseShapeError: parsed.parseError ? null : reviewShapeError(parsed.parsed),
+    // HOUSE-END(fail-closed-review)
     threadId: result.threadId,
     turnId: result.turnId,
     payload,
