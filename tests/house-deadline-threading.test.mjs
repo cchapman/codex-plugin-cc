@@ -79,3 +79,36 @@ test("task --deadline-ms is consumed as an OPTION, not leaked into the prompt", 
     `--deadline-ms leaked into the task prompt/summary: ${record.summary}`
   );
 });
+
+// Round-trip pin: the BACKGROUND path persists the whole request object in the
+// job record (enqueueBackgroundTask), and handleTaskWorker rebuilds by spreading
+// the stored request — so record.request.deadlineMs surviving the persist is
+// exactly what guarantees the worker sees the deadline. A refactor that rebuilds
+// the request field-by-field and drops deadlineMs would fail here, not in prod.
+test("task --background persists deadlineMs in the stored request (worker round-trip)", () => {
+  const repo = gitRepo();
+  const stateDir = mkTmp("house-deadline-bg-state-");
+  const jobId = "task-house-deadline-bg";
+  // Unlike the foreground path (which persists the job before the availability
+  // check), --background checks codex availability BEFORE enqueueing — so a
+  // stripped PATH never reaches the persist. Satisfy the probe (`codex
+  // --version` + `codex app-server --help`, exit-status only) with a stub that
+  // exits 0; the detached worker then fails fast against the same stub.
+  const stubBin = mkTmp("house-deadline-stub-bin-");
+  fs.writeFileSync(path.join(stubBin, "codex"), "#!/bin/sh\nexit 0\n");
+  fs.chmodSync(path.join(stubBin, "codex"), 0o755);
+  spawnSync(process.execPath, [COMPANION, "task", "--job-id", jobId,
+    "--deadline-ms", "60000", "--background", "--json", "--cwd", repo], {
+    cwd: repo,
+    input: "prompt\n",
+    env: { ...process.env, CLAUDE_PLUGIN_DATA: stateDir, PATH: `${stubBin}:/usr/bin:/bin` },
+    encoding: "utf8", timeout: 60000
+  });
+  const stateRoot = path.join(stateDir, "state");
+  const jobFiles = fs.readdirSync(stateRoot, { recursive: true })
+    .filter((f) => String(f).endsWith(`${jobId}.json`));
+  assert.equal(jobFiles.length, 1, `expected exactly one job file for ${jobId}`);
+  const record = JSON.parse(fs.readFileSync(path.join(stateRoot, String(jobFiles[0])), "utf8"));
+  assert.equal(record.request?.deadlineMs, 60000,
+    "deadlineMs did not survive the background job-file persist");
+});
