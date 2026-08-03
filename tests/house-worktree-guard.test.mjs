@@ -201,6 +201,33 @@ test("defaultBranches: bare origin -> {main,master} fallback", async () => {
   assert.deepEqual(await defaultBranches("x", fake), new Set(["main", "master"]));
 });
 
+// Pins gitRunner threading: every one of writeGuard's own probes, AND its
+// forward into defaultBranches(repo, gitRunner), must go through the
+// INJECTED runner — never fall back to the real guardGit default. The repo
+// path doesn't exist on disk, so any probe that fell through to real git
+// would error (git -C on a nonexistent dir fails) and produce a non-null
+// block reason; a null result is therefore only possible if every probe,
+// including the defaultBranches forward, went through the fake.
+test("writeGuard threads gitRunner through every internal probe, including defaultBranches", async () => {
+  const calls = [];
+  const fake = async (repo, ...args) => {
+    const key = args.join(" ");
+    calls.push(key);
+    if (key === "rev-parse --is-inside-work-tree") return "true";
+    if (key === "rev-parse --path-format=absolute --git-dir --git-common-dir") {
+      return "/fake/gitdir\n/fake/gitcommondir"; // distinct paths -> linked worktree
+    }
+    if (key === "rev-parse --abbrev-ref HEAD") return "feat-x"; // feature branch
+    if (key === "rev-parse --abbrev-ref origin/HEAD") return "origin/main";
+    throw new Error(`fake gitRunner: unexpected git args (${key})`);
+  };
+  const result = await writeGuard("/nonexistent/wtguard-fake", false, fake);
+  assert.equal(result, null,
+    "a null result on a NONEXISTENT repo path proves every probe went through the injected fake, not real git");
+  assert.ok(calls.includes("rev-parse --abbrev-ref origin/HEAD"),
+    "defaultBranches(repo, gitRunner) must forward the injected gitRunner rather than defaulting to guardGit");
+});
+
 test("UNSAFE_BANNER carries the conspicuous bypass marker", () => {
   assert.match(UNSAFE_BANNER, /GUARD BYPASSED/);
 });
