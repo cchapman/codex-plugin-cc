@@ -39,11 +39,15 @@ function primaryAndWorktree() {
 }
 
 function runEntry(repo, { mode = "ok", extraArgs = [], extraEnv = {}, jobId = "task-t1", input = "prompt\n" } = {}) {
+  // Scrub any TASK_DEADLINE_MS inherited from this process's own environment
+  // so the env-fallback and default-deadline tests are deterministic — only
+  // extraEnv may (re)introduce it.
+  const env = { ...process.env, CLAUDE_PLUGIN_DATA: mkTmp("house-task-entry-state-"), FAKE_MODE: mode };
+  delete env.TASK_DEADLINE_MS;
+  Object.assign(env, extraEnv);
   return spawnSync(process.execPath,
     [ENTRY, "--job-id", jobId, "--cwd", repo, "--companion", FAKE, ...extraArgs],
-    { input, encoding: "utf8", timeout: 60000,
-      env: { ...process.env, CLAUDE_PLUGIN_DATA: mkTmp("house-task-entry-state-"),
-             FAKE_MODE: mode, ...extraEnv } });
+    { input, encoding: "utf8", timeout: 60000, env });
 }
 
 test("healthy read-only task -> exit 0", () => {
@@ -105,4 +109,30 @@ test("provenance (CXR-003): without --write, the author identity is NOT stamped"
   const dumped = JSON.parse(fs.readFileSync(envDump, "utf8"));
   assert.equal(dumped.GIT_AUTHOR_NAME, null);
   assert.equal(dumped.GIT_AUTHOR_EMAIL, null);
+});
+
+test("invalid --deadline-ms -> usage exit 2, companion not spawned", () => {
+  const marker = path.join(mkTmp("house-task-entry-marker-"), "spawned");
+  const r = runEntry(gitRepo(),
+    { extraArgs: ["--deadline-ms", "abc"], extraEnv: { FAKE_SPAWN_MARKER: marker } });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /invalid --deadline-ms/);
+  assert.ok(!fs.existsSync(marker), "companion was spawned despite the invalid --deadline-ms");
+});
+test("TASK_DEADLINE_MS env fallback is forwarded to the companion when --deadline-ms is absent", () => {
+  const argvFile = path.join(mkTmp("house-task-entry-argv-"), "argv.json");
+  const r = runEntry(gitRepo(),
+    { extraEnv: { TASK_DEADLINE_MS: "12345", FAKE_ARGV_DUMP: argvFile } });
+  assert.equal(r.status, 0);
+  const argv = JSON.parse(fs.readFileSync(argvFile, "utf8"));
+  const i = argv.indexOf("--deadline-ms");
+  assert.ok(i !== -1 && argv[i + 1] === "12345", "expected --deadline-ms 12345 in companion argv");
+});
+test("default deadline (no flag, no env) is 3600000ms", () => {
+  const argvFile = path.join(mkTmp("house-task-entry-argv-"), "argv.json");
+  const r = runEntry(gitRepo(), { extraEnv: { FAKE_ARGV_DUMP: argvFile } });
+  assert.equal(r.status, 0);
+  const argv = JSON.parse(fs.readFileSync(argvFile, "utf8"));
+  const i = argv.indexOf("--deadline-ms");
+  assert.ok(i !== -1 && argv[i + 1] === "3600000", "expected --deadline-ms 3600000 in companion argv");
 });
