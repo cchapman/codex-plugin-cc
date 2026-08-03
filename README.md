@@ -23,7 +23,7 @@
 2. `./house-test.sh` — must be green (bare `npm test` gives 5 spurious failures).
 3. Bump the version with the repo's own sync tool — `node scripts/bump-version.mjs 1.0.6-house.<n+1>` then `node scripts/bump-version.mjs --check <version>` — never by hand-editing manifests (the tool keeps package.json, package-lock.json, plugin.json, and marketplace.json in step; a manual two-manifest edit fails its check — found the hard way, review CXR-001 2026-08-03). Update the version + based-on line in this README's breadcrumb too (manual). Installs are version-cached (`~/.claude/plugins/cache/cchapman-codex/codex/<version>/`), so a push without a bump never reaches installed machines.
 4. Commit + push `house` (the GitHub default; marketplace installs follow it).
-5. On each machine: `claude plugin update codex@cchapman-codex` (or `~/.claude/bin/update-plugins.sh`), then verify `python3 ~/.claude/bin/resolve-codex-fork.py` prints the new version path and `~/.claude/setup-codex-peer.sh --check` is converged.
+5. On each machine: `claude plugin update codex@cchapman-codex` (or `~/.claude/bin/update-plugins.sh`), then verify `python3 ~/.claude/bin/resolve-codex-fork.py` prints the new version path and `~/.claude/setup-codex-peer.sh --check` is converged. A fresh `plugin install` (unlike `plugin update`) uses the cached marketplace metadata and can grab a stale version — run `claude plugin marketplace update cchapman-codex` first (observed live during the 1.0.6-house.1 rescheme).
 
 **Sync from upstream** (openai/codex-plugin-cc ships rarely):
 1. `git fetch upstream`
