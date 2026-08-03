@@ -5,13 +5,13 @@
   },
   "metadata": {
     "description": "Codex plugins for Claude Code — cchapman house fork (turn deadline, fail-closed review, supervisor entrypoints).",
-    "version": "2.0.1"
+    "version": "1.0.6-house.1"
   },
   "plugins": [
     {
       "name": "codex",
       "description": "Use Codex from Claude Code to review code or delegate tasks.",
-      "version": "2.0.1",
+      "version": "1.0.6-house.1",
       "author": {
         "name": "OpenAI"
       },

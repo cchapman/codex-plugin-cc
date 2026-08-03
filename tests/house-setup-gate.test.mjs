@@ -21,15 +21,21 @@ function gitRepo() {
   return repo;
 }
 
-function runSetup(repo, stateDir, extraArgs) {
-  const res = spawnSync(process.execPath, [COMPANION, "setup", "--json",
+const HOUSE_WARNING = "WARNING (house policy): the stop-review gate duplicates the external stop-gate + review-changes flow and adds 20-135s Stop tails; it can loop Claude/Codex and drain usage limits. Keep it OFF unless actively monitored — revert with /codex:setup --disable-review-gate (see ~/.claude/docs/SETUP.md).";
+
+function runSetupRaw(repo, stateDir, extraArgs) {
+  const res = spawnSync(process.execPath, [COMPANION, "setup",
     "--cwd", repo, ...extraArgs], {
     cwd: repo,
     env: { ...process.env, CLAUDE_PLUGIN_DATA: stateDir, PATH: "/usr/bin:/bin" },
     encoding: "utf8", timeout: 60000
   });
   assert.equal(res.status, 0, `setup exited ${res.status}: ${res.stderr}`);
-  return JSON.parse(res.stdout);
+  return res.stdout;
+}
+
+function runSetup(repo, stateDir, extraArgs) {
+  return JSON.parse(runSetupRaw(repo, stateDir, ["--json", ...extraArgs]));
 }
 
 // HOUSE(setup-gate-warning): enabling the gate must carry the deterministic
@@ -42,13 +48,19 @@ test("setup --enable-review-gate emits the house-policy warning", () => {
   const report = runSetup(repo, stateDir, ["--enable-review-gate"]);
   assert.equal(report.reviewGateEnabled, true);
   assert.ok(
-    report.actionsTaken.some((a) => a.includes("WARNING (house policy)")),
-    `actionsTaken missing house warning: ${JSON.stringify(report.actionsTaken)}`
+    report.actionsTaken.includes(HOUSE_WARNING),
+    `actionsTaken missing exact house warning: ${JSON.stringify(report.actionsTaken)}`
   );
-  assert.ok(
-    report.actionsTaken.some((a) => a.includes("--disable-review-gate")),
-    "warning must name the revert command"
-  );
+});
+
+test("rendered (non-JSON) enable output carries the warning + revert command", () => {
+  const repo = gitRepo();
+  const stateDir = mkTmp("house-setupgate-state-");
+  const out = runSetupRaw(repo, stateDir, ["--enable-review-gate"]);
+  assert.ok(out.includes("WARNING (house policy)"),
+    `rendered output missing house warning: ${out}`);
+  assert.ok(out.includes("/codex:setup --disable-review-gate"),
+    "rendered output must name the revert command");
 });
 
 test("gate-off setup report carries the keep-it-off note, not upstream's upsell", () => {
