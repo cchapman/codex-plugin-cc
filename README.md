@@ -9,6 +9,23 @@
 > `./house-test.sh`, not bare `npm test`. Marketplace identity:
 > `codex@cchapman-codex` v2.0.0.
 
+## House maintenance
+
+**Ship a house change:**
+1. Edit in the dev clone (`~/.claude/plugins/dev/codex-plugin-cc`, branch `house`).
+2. `./house-test.sh` — must be green (bare `npm test` gives 5 spurious failures).
+3. Bump the version in BOTH `.claude-plugin/marketplace.json` (2 places: marketplace + plugin entry) and `plugins/codex/.claude-plugin/plugin.json` — installs are version-cached (`~/.claude/plugins/cache/cchapman-codex/codex/<version>/`), so a push without a bump never reaches installed machines.
+4. Commit + push `house` (the GitHub default; marketplace installs follow it).
+5. On each machine: `claude plugin update codex@cchapman-codex` (or `~/.claude/bin/update-plugins.sh`), then verify `python3 ~/.claude/bin/resolve-codex-fork.py` prints the new version path and `~/.claude/setup-codex-peer.sh --check` is converged.
+
+**Sync from upstream** (openai/codex-plugin-cc ships rarely):
+1. `git fetch upstream`
+2. Update the pristine mirror: `git checkout main && git merge --ff-only upstream/main && git push origin main` (ff-only — `main` must stay byte-identical to upstream; a non-ff here means `main` was polluted).
+3. `git checkout house && git merge main` — HOUSE-marked overlay blocks in upstream files conflict loudly by design; re-apply the house edit inside the markers.
+4. `./house-test.sh`, then version-bump + push per the ship steps above.
+
+The consumer-side contract (resolver, supervisor exit codes, skill choreography) is documented in `~/.claude/skills/codex-review/SKILL.md`, `skills/codex-task/SKILL.md`, and `docs/SETUP.md`; the design record is `~/.claude/docs/superpowers/specs/2026-07-31-codex-plugin-fork-design.md` (note: its "Upstream-tracking workflow" section predates the `house`/`main` split — this section supersedes it).
+
 Use Codex from inside Claude Code for code reviews or to delegate tasks to Codex.
 
 This plugin is for Claude Code users who want an easy way to start using Codex from the workflow
@@ -30,16 +47,20 @@ they already have.
 
 ## Install
 
+> House fork: install from THIS repo, not upstream — the upstream
+> `codex@openai-codex` plugin lacks the deadline fix and the house
+> supervisor entrypoints the `~/.claude` skills dispatch through.
+
 Add the marketplace in Claude Code:
 
 ```bash
-/plugin marketplace add openai/codex-plugin-cc
+/plugin marketplace add cchapman/codex-plugin-cc
 ```
 
 Install the plugin:
 
 ```bash
-/plugin install codex@openai-codex
+/plugin install codex@cchapman-codex
 ```
 
 Reload plugins:
