@@ -15,6 +15,9 @@ if (process.env.FAKE_ENV_DUMP) {
     JSON.stringify({ GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME ?? null,
                      GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL ?? null }));
 }
+if (process.env.FAKE_ARGV_DUMP) {
+  fs.writeFileSync(process.env.FAKE_ARGV_DUMP, JSON.stringify(process.argv.slice(2)));
+}
 ensureStateDir(cwd);
 const job = { id: jobId, workspaceRoot: cwd, title: "fake", kind: "fake" };
 const finish = (status, code) => {
