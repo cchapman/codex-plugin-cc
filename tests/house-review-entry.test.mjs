@@ -37,16 +37,24 @@ test("supervisor STAYS ALIVE to job termination (no unref+return)", () => {
   assert.ok(Date.now() - t0 >= 2000, "returned before the worker finished — launcher-that-returns");
 });
 test("worker fails -> exit 1", () => {
-  assert.equal(runEntry(gitRepo(), { mode: "fail" }).status, 1);
+  const r = runEntry(gitRepo(), { mode: "fail" });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /companion exited 1 — fail closed \(never a benign skip\)/);
 });
 test("child exit 3 is NOT the benign skip -> exit 1", () => {
-  assert.equal(runEntry(gitRepo(), { mode: "exit3" }).status, 1);
+  const r = runEntry(gitRepo(), { mode: "exit3" });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /companion exited 3 — fail closed \(never a benign skip\)/);
 });
 test("clean child exit with NONTERMINAL job -> fail closed exit 1", () => {
-  assert.equal(runEntry(gitRepo(), { mode: "early-exit" }).status, 1);
+  const r = runEntry(gitRepo(), { mode: "early-exit" });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /companion exited 0 but job review-t1 is missing — fail closed/);
 });
 test("signal death -> exit 1", () => {
-  assert.equal(runEntry(gitRepo(), { mode: "crash" }).status, 1);
+  const r = runEntry(gitRepo(), { mode: "crash" });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /companion died on signal SIGKILL — fail closed/);
 });
 test("empty diff -> exit 3 WITHOUT spawning the companion", () => {
   const marker = path.join(mkTmp("house-entry-marker-"), "spawned");
