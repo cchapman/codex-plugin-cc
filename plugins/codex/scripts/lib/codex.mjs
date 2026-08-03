@@ -1205,7 +1205,7 @@ export async function runAppServerTurn(cwd, options = {}) {
           effort: options.effort ?? null,
           outputSchema: options.outputSchema ?? null
         }),
-      { onProgress: options.onProgress }
+      { onProgress: options.onProgress, deadlineMs: options.deadlineMs ?? null } // HOUSE(deadline-thread)
     );
 
     return {

@@ -413,6 +413,7 @@ async function executeReviewRun(request) {
     model: request.model,
     sandbox: "read-only",
     outputSchema: readOutputSchema(REVIEW_SCHEMA),
+    deadlineMs: request.deadlineMs ?? null, // HOUSE(deadline-thread)
     onProgress: request.onProgress
   });
   const parsed = parseStructuredOutput(result.finalMessage, {
@@ -491,7 +492,8 @@ async function executeTaskRun(request) {
     sandbox: request.write ? "workspace-write" : "read-only",
     onProgress: request.onProgress,
     persistThread: true,
-    threadName: resumeThreadId ? null : buildPersistentTaskThreadName(request.prompt || DEFAULT_CONTINUE_PROMPT)
+    threadName: resumeThreadId ? null : buildPersistentTaskThreadName(request.prompt || DEFAULT_CONTINUE_PROMPT),
+    deadlineMs: request.deadlineMs ?? null // HOUSE(deadline-thread)
   });
 
   const rawOutput = typeof result.finalMessage === "string" ? result.finalMessage : "";
@@ -604,7 +606,7 @@ function buildTaskJob(workspaceRoot, taskMetadata, write, jobId = null) {
   });
 }
 
-function buildTaskRequest({ cwd, model, effort, prompt, write, resumeLast, jobId }) {
+function buildTaskRequest({ cwd, model, effort, prompt, write, resumeLast, jobId, deadlineMs = null }) {
   return {
     cwd,
     model,
@@ -612,7 +614,8 @@ function buildTaskRequest({ cwd, model, effort, prompt, write, resumeLast, jobId
     prompt,
     write,
     resumeLast,
-    jobId
+    jobId,
+    deadlineMs // HOUSE(deadline-thread)
   };
 }
 
@@ -714,7 +717,7 @@ function enqueueBackgroundTask(cwd, job, request) {
 
 async function handleReviewCommand(argv, config) {
   const { options, positionals } = parseCommandInput(argv, {
-    valueOptions: ["base", "scope", "model", "cwd", /* HOUSE(job-id-down) */ "job-id"],
+    valueOptions: ["base", "scope", "model", "cwd", /* HOUSE(job-id-down) */ "job-id", /* HOUSE(deadline-thread) */ "deadline-ms"],
     booleanOptions: ["json", "background", "wait"],
     aliasMap: {
       m: "model"
@@ -728,6 +731,7 @@ async function handleReviewCommand(argv, config) {
     base: options.base,
     scope: options.scope
   });
+  const houseDeadlineMs = Number(options["deadline-ms"]); // HOUSE(deadline-thread)
 
   config.validateRequest?.(target, focusText);
   const metadata = buildReviewJobMetadata(config.reviewName, target);
@@ -750,6 +754,7 @@ async function handleReviewCommand(argv, config) {
         model: options.model,
         focusText,
         reviewName: config.reviewName,
+        deadlineMs: Number.isFinite(houseDeadlineMs) && houseDeadlineMs > 0 ? houseDeadlineMs : null, // HOUSE(deadline-thread)
         onProgress: progress
       }),
     { json: options.json }
@@ -765,7 +770,7 @@ async function handleReview(argv) {
 
 async function handleTask(argv) {
   const { options, positionals } = parseCommandInput(argv, {
-    valueOptions: ["model", "effort", "cwd", "prompt-file", /* HOUSE(job-id-down) */ "job-id"],
+    valueOptions: ["model", "effort", "cwd", "prompt-file", /* HOUSE(job-id-down) */ "job-id", /* HOUSE(deadline-thread) */ "deadline-ms"],
     booleanOptions: ["json", "write", "resume-last", "resume", "fresh", "background"],
     aliasMap: {
       m: "model"
@@ -777,6 +782,8 @@ async function handleTask(argv) {
   const model = normalizeRequestedModel(options.model);
   const effort = normalizeReasoningEffort(options.effort);
   const prompt = readTaskPrompt(cwd, options, positionals);
+  const houseDeadlineMs = Number(options["deadline-ms"]); // HOUSE(deadline-thread)
+  const deadlineMs = Number.isFinite(houseDeadlineMs) && houseDeadlineMs > 0 ? houseDeadlineMs : null; // HOUSE(deadline-thread)
 
   const resumeLast = Boolean(options["resume-last"] || options.resume);
   const fresh = Boolean(options.fresh);
@@ -801,7 +808,8 @@ async function handleTask(argv) {
       prompt,
       write,
       resumeLast,
-      jobId: job.id
+      jobId: job.id,
+      deadlineMs // HOUSE(deadline-thread)
     });
     const { payload } = enqueueBackgroundTask(cwd, job, request);
     outputCommandResult(payload, renderQueuedTaskLaunch(payload), options.json);
@@ -820,6 +828,7 @@ async function handleTask(argv) {
         write,
         resumeLast,
         jobId: job.id,
+        deadlineMs, // HOUSE(deadline-thread)
         onProgress: progress
       }),
     { json: options.json }
