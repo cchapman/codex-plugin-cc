@@ -556,11 +556,69 @@ function applyTurnNotification(state, message) {
   }
 }
 
+// HOUSE-BEGIN(turn-deadline-const)
+const HOUSE_INTERRUPT_GRACE_MS = 5000;
+// HOUSE-END(turn-deadline-const)
+
 async function captureTurn(client, threadId, startRequest, options = {}) {
   const state = createTurnCaptureState(threadId, options);
   const previousHandler = client.notificationHandler;
 
+  // HOUSE-BEGIN(turn-deadline) — finite wall-clock bound spanning BOTH awaits
+  // (turn/start AND state.completion). Established BEFORE startRequest() so a
+  // hung turn/start is covered too (fork spec, F1-01). deadlineMs is threaded
+  // per path by the caller — never read from a global env here.
+  state.houseToolCallCount = 0;
+  state.houseLastEventAt = 0;
+  const houseStartedAt = Date.now();
+  const deadlineMs =
+    Number.isFinite(options.deadlineMs) && options.deadlineMs > 0 ? options.deadlineMs : null;
+  let houseDeadlineTimer = null;
+  const houseDeadline = deadlineMs === null ? null : new Promise((_resolve, reject) => {
+    houseDeadlineTimer = setTimeout(async () => {
+      houseDeadlineTimer = null;
+      options.onDeadline?.(state);
+      const turnId = state.turnId ?? state.threadTurnIds.get(threadId) ?? null;
+      let interruptNote = "not sendable (no turnId — turn/start never completed)";
+      if (turnId) {
+        // Separately-bounded best-effort interrupt (5s grace), then reject
+        // locally REGARDLESS of acknowledgement. The broker reap is the backstop.
+        try {
+          await Promise.race([
+            client.request("turn/interrupt", { threadId, turnId }),
+            new Promise((r) => { const t = setTimeout(r, HOUSE_INTERRUPT_GRACE_MS); t.unref?.(); })
+          ]);
+          interruptNote = "sent";
+        } catch (err) {
+          interruptNote = `send failed (${err?.message ?? err})`;
+        }
+      }
+      const elapsedS = Math.round((Date.now() - houseStartedAt) / 1000);
+      const lastAgeS = state.houseLastEventAt
+        ? Math.round((Date.now() - state.houseLastEventAt) / 1000) : null;
+      reject(new Error(
+        `Turn deadline exceeded after ${elapsedS}s (deadline ${deadlineMs}ms; ` +
+        `${state.houseToolCallCount} tool calls; last event ` +
+        `${lastAgeS === null ? "never seen" : `${lastAgeS}s ago`}). ` +
+        `turn/interrupt ${interruptNote}. The tracked job fails deterministically; ` +
+        `do NOT salvage a provisional lastAgentMessage.`));
+    }, deadlineMs);
+    houseDeadlineTimer.unref?.();
+  });
+  // A settled race leaves houseDeadline's rejection otherwise unobserved —
+  // pre-attach a no-op handler so it can never surface as an unhandledRejection.
+  houseDeadline?.catch(() => {});
+  const houseRace = (p) => (houseDeadline === null ? p : Promise.race([p, houseDeadline]));
+  // HOUSE-END(turn-deadline)
+
   client.setNotificationHandler((message) => {
+    // HOUSE-BEGIN(turn-diagnostics) — scalar aggregates only (counters +
+    // timestamps); an unbounded history array would OOM on an infinite tool loop.
+    state.houseLastEventAt = Date.now();
+    if (message.method === "item/started" && message.params?.item?.type === "commandExecution") {
+      state.houseToolCallCount += 1;
+    }
+    // HOUSE-END(turn-diagnostics)
     if (!state.turnId) {
       state.bufferedNotifications.push(message);
       return;
@@ -582,7 +640,7 @@ async function captureTurn(client, threadId, startRequest, options = {}) {
   });
 
   try {
-    const response = await startRequest();
+    const response = await houseRace(startRequest());   // HOUSE(turn-deadline): raced
     options.onResponse?.(response, state);
     state.turnId = response.turn?.id ?? null;
     if (state.turnId) {
@@ -603,8 +661,15 @@ async function captureTurn(client, threadId, startRequest, options = {}) {
       completeTurn(state, response.turn);
     }
 
-    return await state.completion;
+    return await houseRace(state.completion);           // HOUSE(turn-deadline): raced
   } finally {
+    // HOUSE-BEGIN(turn-deadline-cleanup) — clear on EVERY exit, including an
+    // early startRequest() rejection; a leaked timer fires a stray interrupt later.
+    if (houseDeadlineTimer) {
+      clearTimeout(houseDeadlineTimer);
+      houseDeadlineTimer = null;
+    }
+    // HOUSE-END(turn-deadline-cleanup)
     clearCompletionTimer(state);
     client.setNotificationHandler(previousHandler ?? null);
   }
@@ -1217,3 +1282,8 @@ export function readOutputSchema(schemaPath) {
 }
 
 export { DEFAULT_CONTINUE_PROMPT, TASK_THREAD_PREFIX };
+
+// HOUSE-BEGIN(test-export) — captureTurn is module-private upstream; the house
+// deadline integration tests must drive the REAL function, not a copy.
+export { captureTurn as houseCaptureTurn };
+// HOUSE-END(test-export)
