@@ -43,12 +43,15 @@ test("case 3: startRequest rejects early -> original error, timer cancelled, NO 
   const unhandled = [];
   const onUR = (err) => unhandled.push(err);
   process.on("unhandledRejection", onUR);
+  let deadlineFired = false;
   try {
     await assert.rejects(
       houseCaptureTurn(client, "th-3", () => Promise.reject(new Error("boom")),
-        { deadlineMs: 100 }),
+        { deadlineMs: 100, onDeadline: () => { deadlineFired = true; } }),
       /boom/);
     await sleep(250);   // past the deadline — a leaked timer would fire here
+    assert.equal(deadlineFired, false,
+      "onDeadline fired after early rejection — deadline timer was not cleared");
     assert.equal(client.requests.filter((r) => r.method === "turn/interrupt").length, 0,
       "stray interrupt after early rejection");
     assert.equal(unhandled.length, 0, `unhandled rejections: ${unhandled}`);
@@ -88,7 +91,7 @@ test("tracked-job integration: deadline failure persists job status failed", asy
   t.after(() => { delete process.env.CLAUDE_PLUGIN_DATA; });
   const { runTrackedJob } = await import(
     path.join(ROOT, "plugins/codex/scripts/lib/tracked-jobs.mjs"));
-  const { writeJobFile, resolveJobFile, readJobFile, ensureStateDir } = await import(
+  const { resolveJobFile, readJobFile, ensureStateDir } = await import(
     path.join(ROOT, "plugins/codex/scripts/lib/state.mjs"));
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "house-deadline-cwd-"));
   ensureStateDir(cwd);
