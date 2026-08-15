@@ -17,6 +17,16 @@ Core constraint:
 - Do not fix issues, apply patches, or suggest that you are about to make changes.
 - Your only job is to run the review and return Codex's output verbatim to the user.
 - Keep the framing focused on whether the current approach is the right one, what assumptions it depends on, and where the design could fail under real-world conditions.
+- HOUSE(triage-pointer): this dispatch mechanically credits the house stop-gate
+  review chime, but the review it returns has NOT been triaged. Before you or
+  the user act on any finding, triage per
+  `~/.claude/skills/review-changes/SKILL.md` Step 5 — the canonical taxonomy
+  (reachability x consequence, plus the measurement obligation). Adversarial
+  frames enumerate the possibility space, not the failure rate, so acting on
+  findings untriaged is the unbounded fix loop that taxonomy exists to stop
+  (house issue #111). Findings from this command also arrive without the house
+  contract's `[PRECONDITION ...]` tags, so treat every reachability claim in
+  them as UNVERIFIED.
 
 Execution mode rules:
 - If the raw arguments include `--wait`, do not ask. Run in the foreground.
