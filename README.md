@@ -9,12 +9,14 @@
 > `./house-test.sh`, not bare `npm test`. Marketplace identity:
 > `codex@cchapman-codex`. **Version scheme:** `<upstream>-house.<n>`
 > (Debian-style: upstream base + house release counter) — currently
-> **1.0.6-house.1**, based on upstream tag v1.0.6 (`db52e28`). Numeric
+> **1.0.6-house.2**, based on upstream tag v1.0.6 (`db52e28`). Numeric
 > pre-release ids order correctly (`house.2` > `house.1`; `1.0.7-house.1` >
 > `1.0.6-house.N`), and nothing ever compares our version against upstream's
-> bare one. Known residual: whether `claude plugin update` auto-updates
-> across pre-release versions is unverified — check on the next release;
-> fallback is an independent version line.
+> bare one. **Residual RESOLVED 2026-08-15** on the house.1 → house.2
+> release: `claude plugin update` DOES auto-update across pre-release
+> versions — observed live, `Plugin "codex" updated from 1.0.6-house.1 to
+> 1.0.6-house.2`, with `resolve-codex-fork.py` then pointing at the new
+> version path. The independent-version-line fallback is not needed.
 
 ## House maintenance
 
