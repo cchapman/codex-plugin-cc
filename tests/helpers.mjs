@@ -6,12 +6,19 @@ import { spawnSync } from "node:child_process";
 import { after } from "node:test";
 import { clearBrokerSession, loadBrokerSession, teardownBrokerSession } from "../plugins/codex/scripts/lib/broker-lifecycle.mjs";
 import { terminateProcessTree } from "../plugins/codex/scripts/lib/process.mjs";
+import { resolveWorkspaceRoot } from "../plugins/codex/scripts/lib/workspace.mjs";
 
 export function makeTempDir(prefix = "codex-plugin-test-") {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   // Register before returning so failed assertions cannot bypass teardown.
-  // Only consult the session saved for this newly created fixture workspace.
+  // Only consult a session when the fixture is its own canonical workspace root;
+  // an enclosing repo or inherited Git environment must not donate its broker.
   after(() => {
+    try {
+      if (fs.realpathSync.native(resolveWorkspaceRoot(directory)) !== fs.realpathSync.native(directory)) return;
+    } catch {
+      return;
+    }
     const session = loadBrokerSession(directory);
     // Some status tests save endpoint-only stubs; those own no process.
     if (!Number.isInteger(session?.pid) || session.pid <= 0) return;
