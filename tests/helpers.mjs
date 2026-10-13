@@ -3,9 +3,24 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
+import { after } from "node:test";
+import { clearBrokerSession, loadBrokerSession, teardownBrokerSession } from "../plugins/codex/scripts/lib/broker-lifecycle.mjs";
+import { terminateProcessTree } from "../plugins/codex/scripts/lib/process.mjs";
 
 export function makeTempDir(prefix = "codex-plugin-test-") {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  // Register before returning so failed assertions cannot bypass teardown.
+  // Only consult the session saved for this newly created fixture workspace.
+  after(() => {
+    const session = loadBrokerSession(directory);
+    // Some status tests save endpoint-only stubs; those own no process.
+    if (!Number.isInteger(session?.pid) || session.pid <= 0) return;
+    clearBrokerSession(directory);
+    // SIGTERM also invokes the real broker's shutdown handler. Terminate once,
+    // rather than sending shutdown and then signaling a potentially exited PID.
+    teardownBrokerSession({ ...session, killProcess: terminateProcessTree });
+  });
+  return directory;
 }
 
 export function writeExecutable(filePath, source) {
